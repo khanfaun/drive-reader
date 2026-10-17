@@ -59,6 +59,8 @@ button:disabled { cursor: default; }
 .item-action { color: var(--muted); font-size: 10px; }
 .drive-empty, .drive-error { display: grid; min-height: 120px; flex: 1; place-items: center; padding: 20px; color: var(--muted); text-align: center; font-size: 13px; }
 .drive-error { color: #c34545; }
+.show-more-items { align-self: center; min-height: 36px; margin: 8px 0; padding: 0 12px; color: var(--muted); background: var(--panel); border: 1px solid var(--line); border-radius: 9px; font-size: 12px; }
+.show-more-items:hover { color: var(--ink); background: var(--panel-2); }
 .browse-placeholder { min-width: 0; flex: 1; display: grid; place-items: center; padding: 20px; }
 .welcome-card { display: grid; justify-items: center; max-width: 360px; text-align: center; }
 .welcome-icon { display: grid; place-items: center; width: 60px; height: 60px; margin-bottom: 16px; color: var(--muted); background: var(--panel); border: 1px solid var(--line); border-radius: 18px; font-size: 24px; }
@@ -195,4 +197,5 @@ button:disabled { cursor: default; }
   .sheet-path { padding: 0 16px 10px; }
   .sheet-list { padding: 0 12px max(16px, env(safe-area-inset-bottom)); }
 }
+
 

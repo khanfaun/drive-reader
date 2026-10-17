@@ -73,6 +73,7 @@ export default function DriveReader() {
   const [parentFolder, setParentFolder] = useState(null);
   const [folderStack, setFolderStack] = useState(Array.isArray(saved.folderStack) ? saved.folderStack : []);
   const [items, setItems] = useState([]);
+  const [visibleItemLimit, setVisibleItemLimit] = useState(80);
   const [fileId, setFileId] = useState(saved.fileId || "");
   const [fileName, setFileName] = useState(saved.fileName || savedReads[0]?.name || "");
   const [recentReads, setRecentReads] = useState(() => savedReads.slice(0, 3));
@@ -85,6 +86,8 @@ export default function DriveReader() {
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const projectRootId = folderStack[0]?.id || folderId;
+
+  useEffect(() => { setVisibleItemLimit(80); }, [folderId]);
 
   useEffect(() => { writeStorage(THEME_KEY, theme); }, [theme]);
   useEffect(() => { writeStorage(SESSION_KEY, { folderId, folderInput, rootFolderLink: folderInput, folderName, folderStack, fileId, fileName }); }, [folderId, folderInput, folderName, folderStack, fileId, fileName]);
@@ -212,6 +215,11 @@ export default function DriveReader() {
     if (target) openFile(target);
   }
 
+  function goHome() {
+    setListOpen(false);
+    setReaderMode(false);
+  }
+
   function selectRecent(read) {
     if (!read) return;
     if (read.folderId) {
@@ -293,14 +301,14 @@ export default function DriveReader() {
     if (errorMessage) return <div className="drive-error">{errorMessage}</div>;
     if (folderId && !apiKey) return <div className="drive-empty">Thêm Google Drive API key để tải danh mục.</div>;
     if (!items.length) return <div className="drive-empty">{folderId ? "Thư mục trống" : "Dán link thư mục để bắt đầu"}</div>;
-    return <ul className="drive-items">{items.map((item) => {
+    return <><ul className="drive-items">{items.slice(0, visibleItemLimit).map((item) => {
       const folder = item.mimeType === FOLDER_MIME;
       const pdf = readablePdf(item);
       return <li key={item.id}><button type="button" disabled={!folder && !pdf} className={`drive-item ${pdf && item.id === fileId ? "selected" : ""}`} onClick={() => {
         if (folder) openFolder(item.id, [...folderStack, { id: folderId, name: folderName }], false);
         else if (pdf) openFile(item);
       }}><span className="item-icon">{folder ? "▰" : pdf ? "▤" : "·"}</span><span className="item-name">{item.name}</span><span className="item-action">{folder ? "Mở" : pdf ? "Đọc" : "—"}</span></button></li>;
-    })}</ul>;
+    })}</ul>{items.length > visibleItemLimit && <button type="button" className="show-more-items" onClick={() => setVisibleItemLimit((limit) => Math.min(limit + 80, items.length))}>Hiện thêm {Math.min(80, items.length - visibleItemLimit)} mục</button>}</>;
   }
 
   return <main className={`reader-app ${theme} ${readerMode ? "reading" : "home-view"}`}>
@@ -327,7 +335,7 @@ export default function DriveReader() {
       </div>
     </section> : <>
       <header className="reader-toolbar">
-        <button type="button" className="reader-home-button" onClick={() => setReaderMode(false)} aria-label="Trang chủ" title="Trang chủ">⌂</button>
+        <button type="button" className="reader-home-button" onClick={goHome} aria-label="Trang chủ" title="Trang chủ">⌂</button>
         <div className="reader-center-controls">
           <button type="button" className="toolbar-button previous" onClick={() => stepFile(-1)} disabled={!items.some((item) => item.id === fileId)} aria-label="File trước">‹</button>
           <div className="reader-title" title={fileName}>{fileName || "Đang lấy tên file…"}</div>
@@ -340,4 +348,5 @@ export default function DriveReader() {
     </>}
   </main>;
 }
+
 
