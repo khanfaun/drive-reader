@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const API_KEY_KEY = "drive-reader:api-key";
 const SESSION_KEY = "drive-reader:reader-state";
@@ -9,6 +9,8 @@ const REMOVED_FOLDERS_KEY = "drive-reader:removed-folders";
 const REMOVED_PROJECTS_KEY = "drive-reader:removed-projects";
 const THEME_KEY = "drive-reader:theme";
 const FOLDER_MIME = "application/vnd.google-apps.folder";
+const LARGE_PDF_BYTES = 150 * 1024 * 1024;
+const PDF_SWITCH_DELAY = 250;
 
 function readStorage(key, fallback) {
   try { const value = localStorage.getItem(key); return value === null ? fallback : JSON.parse(value); }
@@ -76,6 +78,10 @@ export default function DriveReader() {
   const [visibleItemLimit, setVisibleItemLimit] = useState(80);
   const [fileId, setFileId] = useState(saved.fileId || "");
   const [fileName, setFileName] = useState(saved.fileName || savedReads[0]?.name || "");
+  const [pdfEnabled, setPdfEnabled] = useState(true);
+  const [largePdfPending, setLargePdfPending] = useState(null);
+  const [switchingPdf, setSwitchingPdf] = useState(false);
+  const pdfTransitionTimer = useRef(null);
   const [recentReads, setRecentReads] = useState(() => savedReads.slice(0, 3));
   const [recentFolders, setRecentFolders] = useState(() => Array.isArray(foldersSaved) ? foldersSaved : []);
   const [projects, setProjects] = useState(() => Array.isArray(projectsSaved) ? projectsSaved.slice(0, 3) : []);
@@ -91,6 +97,7 @@ export default function DriveReader() {
 
   useEffect(() => { writeStorage(THEME_KEY, theme); }, [theme]);
   useEffect(() => { writeStorage(SESSION_KEY, { folderId, folderInput, rootFolderLink: folderInput, folderName, folderStack, fileId, fileName }); }, [folderId, folderInput, folderName, folderStack, fileId, fileName]);
+  useEffect(() => () => window.clearTimeout(pdfTransitionTimer.current), []);
 
   useEffect(() => {
     if (!folderId || !apiKey) { setItems([]); setLoading(false); return; }
@@ -199,14 +206,29 @@ export default function DriveReader() {
   function openFile(item) {
     const id = typeof item === "string" ? extractId(item) : item.id;
     if (!id) return;
-    const name = typeof item === "string" ? (items.find((entry) => entry.id === id)?.name || "") : item.name;
-    setFileId(id); setFileName(name); setReaderMode(true); setListOpen(false);
-    const recent = { fileId: id, folderId, folderLink: folderInput, folderName, folderStack, name };
+    const details = typeof item === "string" ? items.find((entry) => entry.id === id) : item;
+    const name = details?.name || fileName || "PDF Drive";
+    const size = Number(details?.size) || 0;
+    const needsConfirmation = size >= LARGE_PDF_BYTES;
+    window.clearTimeout(pdfTransitionTimer.current);
+    setPdfEnabled(false);
+    setSwitchingPdf(true);
+    setLargePdfPending(null);
+    setListOpen(false);
+    const recent = { fileId: id, folderId, folderLink: folderInput, folderName, folderStack, name, size };
     setRecentReads((current) => {
       const next = [recent, ...current.filter((entry) => entry.fileId !== id)].slice(0, 3);
       writeStorage(RECENT_FILE_KEY, next);
       return next;
     });
+    pdfTransitionTimer.current = window.setTimeout(() => {
+      setFileId(id);
+      setFileName(name);
+      setReaderMode(true);
+      setLargePdfPending(needsConfirmation ? { id, name, size } : null);
+      setPdfEnabled(!needsConfirmation);
+      setSwitchingPdf(false);
+    }, PDF_SWITCH_DELAY);
   }
 
   function stepFile(direction) {
@@ -216,19 +238,54 @@ export default function DriveReader() {
   }
 
   function goHome() {
+    window.clearTimeout(pdfTransitionTimer.current);
     setListOpen(false);
-    setReaderMode(false);
+    setPdfEnabled(false);
+    setLargePdfPending(null);
+    setSwitchingPdf(true);
+    pdfTransitionTimer.current = window.setTimeout(() => {
+      setReaderMode(false);
+      setSwitchingPdf(false);
+    }, PDF_SWITCH_DELAY);
+  }
+
+  function confirmLargePdf() {
+    setLargePdfPending(null);
+    setPdfEnabled(true);
+  }
+
+  function formatFileSize(bytes) {
+    if (!bytes) return "";
+    const units = ["B", "KB", "MB", "GB"];
+    let size = bytes;
+    let unit = 0;
+    while (size >= 1024 && unit < units.length - 1) { size /= 1024; unit += 1; }
+    return `${size >= 100 || unit === 0 ? Math.round(size) : size.toFixed(1)} ${units[unit]}`;
   }
 
   function selectRecent(read) {
     if (!read) return;
+    window.clearTimeout(pdfTransitionTimer.current);
+    setPdfEnabled(false);
+    setLargePdfPending(null);
+    setSwitchingPdf(true);
+    setListOpen(false);
     if (read.folderId) {
       setFolderId(read.folderId);
       setFolderInput(folderLink(read.folderLink || folderInput));
       setFolderName(read.folderName || "");
       setFolderStack(Array.isArray(read.folderStack) ? read.folderStack : []);
     }
-    setFileId(read.fileId); setFileName(read.name || ""); setReaderMode(true);
+    const size = Number(read.size) || Number(items.find((entry) => entry.id === read.fileId)?.size) || 0;
+    const needsConfirmation = !size || size >= LARGE_PDF_BYTES;
+    pdfTransitionTimer.current = window.setTimeout(() => {
+      setFileId(read.fileId);
+      setFileName(read.name || "");
+      setReaderMode(true);
+      setLargePdfPending(needsConfirmation ? { id: read.fileId, name: read.name, size } : null);
+      setPdfEnabled(!needsConfirmation);
+      setSwitchingPdf(false);
+    }, PDF_SWITCH_DELAY);
   }
 
   function selectProject(project) {
@@ -337,13 +394,13 @@ export default function DriveReader() {
       <header className="reader-toolbar">
         <button type="button" className="reader-home-button" onClick={goHome} aria-label="Trang chủ" title="Trang chủ">⌂</button>
         <div className="reader-center-controls">
-          <button type="button" className="toolbar-button previous" onClick={() => stepFile(-1)} disabled={!items.some((item) => item.id === fileId)} aria-label="File trước">‹</button>
+          <button type="button" className="toolbar-button previous" onClick={() => stepFile(-1)} disabled={switchingPdf || !items.some((item) => item.id === fileId)} aria-label="File trước">‹</button>
           <div className="reader-title" title={fileName}>{fileName || "Đang lấy tên file…"}</div>
-          <button type="button" className="toolbar-button next" onClick={() => stepFile(1)} disabled={!items.some((item) => item.id === fileId)} aria-label="File tiếp theo">›</button>
+          <button type="button" className="toolbar-button next" onClick={() => stepFile(1)} disabled={switchingPdf || !items.some((item) => item.id === fileId)} aria-label="File tiếp theo">›</button>
         </div>
         <div className="reader-tools"><button type="button" className={`file-list-button ${listOpen ? "active" : ""}`} onClick={() => setListOpen((value) => !value)} aria-label="Danh sách file trong thư mục" title="Danh sách file trong thư mục"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M7.5 5h9M7.5 10h9M7.5 15h9"/><path d="M3.5 5h.01M3.5 10h.01M3.5 15h.01"/></svg></button><button type="button" className="theme-button" onClick={() => setTheme((value) => value === "light" ? "dark" : "light")} aria-label="Đổi theme">{theme === "light" ? "☾" : "☼"}</button></div>
       </header>
-      <div className="pdf-stage">{fileId ? <iframe key={fileId} className="pdf-frame" title={fileName || "PDF Drive"} src={`https://drive.google.com/file/d/${encodeURIComponent(fileId)}/preview`} allow="autoplay"/> : <div className="drive-empty">Chọn file PDF trong danh sách</div>}</div>
+      <div className="pdf-stage">{pdfEnabled && fileId ? <iframe key={fileId} className="pdf-frame" title={fileName || "PDF Drive"} src={`https://drive.google.com/file/d/${encodeURIComponent(fileId)}/preview`} allow="autoplay"/> : largePdfPending ? <div className="large-pdf-notice"><strong>{largePdfPending.size ? `PDF dung lượng lớn · ${formatFileSize(largePdfPending.size)}` : "Chưa xác định được dung lượng PDF"}</strong><span>Xem trước file lớn có thể làm chậm hoặc treo trình duyệt điện thoại.</span><button type="button" onClick={confirmLargePdf}>Mở thử PDF</button></div> : <div className="drive-empty">{switchingPdf ? "Đang chuyển file…" : fileId ? "Đang chuẩn bị file…" : "Chọn file PDF trong danh sách"}</div>}</div>
       {listOpen && <aside className="reader-file-drawer"><div className="drawer-heading">{(folderStack.length > 0 || parentFolder) && <button type="button" className="back-button" onClick={goToParentFolder} aria-label="Quay lại thư mục cha">←</button>}<div className="drawer-title"><span className="section-label">FILE TRONG THƯ MỤC</span><h2>{folderName || "Drive"}</h2></div><button type="button" className="drawer-close" onClick={() => setListOpen(false)} aria-label="Đóng danh sách">×</button></div><div className="drawer-content">{renderItems()}</div></aside>}
     </>}
   </main>;

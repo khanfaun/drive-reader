@@ -137,6 +137,11 @@ button:disabled { cursor: default; }
 .theme-button { width: 38px; height: 38px; font-size: 17px; }
 .pdf-stage { position: absolute; inset: 58px 0 0; background: var(--page); }
 .pdf-frame { display: block; width: 100%; height: 100%; border: 0; background: #fff; }
+.large-pdf-notice { display: flex; width: min(420px, calc(100% - 32px)); min-height: 220px; flex-direction: column; align-items: center; justify-content: center; gap: 12px; margin: 18vh auto 0; padding: 24px; color: var(--ink); text-align: center; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; }
+.large-pdf-notice strong { font-size: 15px; }
+.large-pdf-notice span { color: var(--muted); font-size: 13px; line-height: 1.5; }
+.large-pdf-notice button { min-height: 40px; padding: 0 16px; color: #fff; background: #22262d; border: 0; border-radius: 10px; font-size: 12px; font-weight: 600; }
+.dark .large-pdf-notice button { color: #111; background: #f2f3f5; }
 .file-list-button.active { background: var(--panel-2); }
 .reader-file-drawer { position: absolute; z-index: 6; top: 58px; right: 0; bottom: 0; display: flex; width: min(390px, 92vw); flex-direction: column; padding: 18px; background: var(--panel); border-left: 1px solid var(--line); box-shadow: -14px 0 42px rgb(0 0 0 / 14%); }
 .drawer-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
